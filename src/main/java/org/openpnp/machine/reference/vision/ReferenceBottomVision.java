@@ -119,7 +119,7 @@ public class ReferenceBottomVision extends AbstractPartAlignment {
             throw new Exception("Part mismatch with part on nozzle.");
         }
 
-        Camera camera = VisionUtils.getBottomVisionCamera();
+        Camera camera = VisionUtils.getBottomVisionCamera(bottomVisionSettings);
         PartAlignmentOffset offsets;
         if ((bottomVisionSettings.getPreRotateUsage() == PreRotateUsage.Default && preRotate)
                 || (bottomVisionSettings.getPreRotateUsage() == PreRotateUsage.AlwaysOn)) {
@@ -148,7 +148,7 @@ public class ReferenceBottomVision extends AbstractPartAlignment {
             return null;
         }
 
-        Camera camera = VisionUtils.getBottomVisionCamera();
+        Camera camera = VisionUtils.getBottomVisionCamera(bottomVisionSettings);
         double wantedAngle = 0.0;
         if ((bottomVisionSettings.getPreRotateUsage() == PreRotateUsage.Default && preRotate)
                 || (bottomVisionSettings.getPreRotateUsage() == PreRotateUsage.AlwaysOn)) {
