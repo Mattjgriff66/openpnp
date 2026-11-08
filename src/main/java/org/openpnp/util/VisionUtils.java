@@ -3,6 +3,7 @@ package org.openpnp.util;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -15,6 +16,7 @@ import org.openpnp.machine.reference.vision.ReferenceFiducialLocator;
 import org.openpnp.model.Area;
 import org.openpnp.model.AreaUnit;
 import org.openpnp.model.BoardLocation;
+import org.openpnp.model.BottomVisionSettings;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.FiducialVisionSettings;
 import org.openpnp.model.Footprint;
@@ -33,6 +35,7 @@ import org.openpnp.spi.Nozzle;
 import org.openpnp.spi.PartAlignment;
 import org.openpnp.spi.PartAlignment.PartAlignmentOffset;
 import org.openpnp.vision.pipeline.CvPipeline;
+import org.pmw.tinylog.Logger;
 
 import com.google.zxing.BinaryBitmap;
 import com.google.zxing.MultiFormatReader;
@@ -156,6 +159,37 @@ public class VisionUtils {
             }
         }
         throw new Exception("No up-looking camera found on the machine to use for bottom vision.");
+    }
+
+    /**
+     * Returns the up-looking camera selected in the given bottom vision settings. Falls back to
+     * the default bottom vision camera (the first up-looking camera) when the settings are null,
+     * select no camera, or select a camera that no longer exists or is not looking up.
+     */
+    public static Camera getBottomVisionCamera(BottomVisionSettings visionSettings) throws Exception {
+        if (visionSettings != null && visionSettings.getCameraId() != null) {
+            Camera camera = Configuration.get().getMachine().getCamera(visionSettings.getCameraId());
+            if (camera != null && camera.getLooking() == Camera.Looking.Up) {
+                return camera;
+            }
+            Logger.warn("Bottom vision settings {} select camera id {} which is not an up-looking camera on the machine, using the default bottom vision camera.",
+                    visionSettings.getName(), visionSettings.getCameraId());
+        }
+        return getBottomVisionCamera();
+    }
+
+    /**
+     * @return All up-looking cameras on the machine, in machine order. The first is the default
+     *         bottom vision camera.
+     */
+    public static List<Camera> getBottomVisionCameras() {
+        List<Camera> cameras = new ArrayList<>();
+        for (Camera camera : Configuration.get().getMachine().getCameras()) {
+            if (camera.getLooking() == Camera.Looking.Up) {
+                cameras.add(camera);
+            }
+        }
+        return cameras;
     }
     
     public static double toPixels(Length length, Camera camera) {

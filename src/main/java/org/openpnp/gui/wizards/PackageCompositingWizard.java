@@ -213,7 +213,9 @@ public class PackageCompositingWizard extends AbstractConfigurationWizard {
     private VisionCompositing.Composite computePreviewComposite() {
         try {
             Machine machine = Configuration.get().getMachine();
-            Camera camera = VisionUtils.getBottomVisionCamera();
+            BottomVisionSettings bottomVisionSettings = ReferenceBottomVision.getDefault()
+                    .getInheritedVisionSettings(pkg);
+            Camera camera = VisionUtils.getBottomVisionCamera(bottomVisionSettings);
             Nozzle nozzle = null;
             NozzleTip nozzleTip = null;
             for (Head head : machine.getHeads()) {
@@ -234,8 +236,6 @@ public class PackageCompositingWizard extends AbstractConfigurationWizard {
                     break;
                 }
             }
-            BottomVisionSettings bottomVisionSettings = ReferenceBottomVision.getDefault()
-                    .getInheritedVisionSettings(pkg);
             if (nozzleTip == null) {
                 throw new Exception(Translations.getString("PackageCompositingWizard.NoCompatibleNozzleTipError.text")+pkg.getId()+"."); //$NON-NLS-1$ //$NON-NLS-2$
             }

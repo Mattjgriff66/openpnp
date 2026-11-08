@@ -5,10 +5,13 @@ import java.awt.image.BufferedImage;
 import java.util.List;
 import java.util.Map;
 
+import javax.swing.DefaultComboBoxModel;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
@@ -16,6 +19,7 @@ import javax.swing.UIManager;
 import javax.swing.border.TitledBorder;
 
 import org.jdesktop.beansbinding.AutoBinding.UpdateStrategy;
+import org.jdesktop.beansbinding.Converter;
 import org.openpnp.Translations;
 import org.openpnp.gui.MainFrame;
 import org.openpnp.gui.components.ComponentDecorators;
@@ -60,6 +64,7 @@ public class BottomVisionSettingsConfigurationWizard extends AbstractConfigurati
     private JPanel panel;
     private JCheckBox enabledCheckbox;
     private JComboBox comboBoxPreRotate;
+    private JComboBox<String> comboBoxCamera;
     private JComboBox comboBoxCheckPartSizeMethod;
     private JTextField textPartSizeTolerance;
     private JComboBox comboBoxMaxRotation;
@@ -240,6 +245,16 @@ public class BottomVisionSettingsConfigurationWizard extends AbstractConfigurati
         enabledCheckbox = new JCheckBox("");
         panel.add(enabledCheckbox, "4, 8");
 
+        JLabel lblCamera = new JLabel(Translations.getString(
+                "BottomVisionSettingsConfigurationWizard.CameraLabel.text")); //$NON-NLS-1$
+        lblCamera.setToolTipText(Translations.getString(
+                "BottomVisionSettingsConfigurationWizard.CameraLabel.toolTipText")); //$NON-NLS-1$
+        panel.add(lblCamera, "6, 8, right, default");
+
+        comboBoxCamera = new JComboBox<>(createCameraIdModel());
+        comboBoxCamera.setRenderer(new CameraIdListCellRenderer());
+        panel.add(comboBoxCamera, "8, 8, fill, default");
+
         JLabel lblPrerotate = new JLabel(Translations.getString(
                 "BottomVisionSettingsConfigurationWizard.PreRotateLabel.text")); //$NON-NLS-1$
         panel.add(lblPrerotate, "2, 10, right, default");
@@ -284,7 +299,7 @@ public class BottomVisionSettingsConfigurationWizard extends AbstractConfigurati
             }
 
             @Override
-            public Camera getCamera() throws Exception { return VisionUtils.getBottomVisionCamera(); }
+            public Camera getCamera() throws Exception { return VisionUtils.getBottomVisionCamera(visionSettings); }
 
             @Override
             public void resetPipeline() throws Exception {
@@ -449,6 +464,7 @@ public class BottomVisionSettingsConfigurationWizard extends AbstractConfigurati
         bind(UpdateStrategy.READ, visionSettings, "usedBottomVisionIn", usedIn, "text", 
                 new AbstractVisionSettings.ListConverter(true, settingsHolder));
         addWrappedBinding(visionSettings, "enabled", enabledCheckbox, "selected");
+        addWrappedBinding(visionSettings, "cameraId", comboBoxCamera, "selectedItem", new CameraIdConverter());
         addWrappedBinding(visionSettings, "preRotateUsage", comboBoxPreRotate, "selectedItem");
         addWrappedBinding(visionSettings, "checkPartSizeMethod", comboBoxCheckPartSizeMethod, "selectedItem");
         addWrappedBinding(visionSettings, "checkSizeTolerancePercent", textPartSizeTolerance, "text", intConverter);
@@ -510,7 +526,7 @@ public class BottomVisionSettingsConfigurationWizard extends AbstractConfigurati
 
     private void pipelineConfiguration(CvPipeline pipeline, Map<String, Object> pipelineParameterAssignments, boolean edit) 
             throws Exception {
-        Camera camera = VisionUtils.getBottomVisionCamera();
+        Camera camera = VisionUtils.getBottomVisionCamera(visionSettings);
         Nozzle nozzle = MainFrame.get().getMachineControls().getSelectedNozzle();
         // Nominal position of the part over camera center
         double angle = new DoubleConverter(Configuration.get().getLengthDisplayFormat())
@@ -592,8 +608,9 @@ public class BottomVisionSettingsConfigurationWizard extends AbstractConfigurati
 
     public void alignAndCenter(ReferenceBottomVision bottomVision, Nozzle nozzle, double angle, boolean centerAfterTest)
             throws Exception {
-        // perform the alignment
-        Camera camera = VisionUtils.getBottomVisionCamera();
+        // perform the alignment, on the camera that the part's (inherited) vision settings use
+        Camera camera = VisionUtils.getBottomVisionCamera(
+                bottomVision.getInheritedVisionSettings(nozzle.getPart()));
         Placement dummy = new Placement("Dummy");
         dummy.setLocation(new Location(LengthUnit.Millimeters, 0, 0, 0, angle));
         Double rotationBefore = nozzle.getRotationModeOffset();
@@ -698,5 +715,62 @@ public class BottomVisionSettingsConfigurationWizard extends AbstractConfigurati
     @Override
     public String getWizardName() {
         return Translations.getString("BottomVisionSettingsConfigurationWizard.wizardName"); //$NON-NLS-1$
+    }
+
+    /**
+     * The camera choices: the empty string stands for "use the default bottom vision camera",
+     * followed by the ids of all up-looking cameras. A selected camera id that no longer exists
+     * is kept in the list, so the setting is not silently lost.
+     */
+    private DefaultComboBoxModel<String> createCameraIdModel() {
+        DefaultComboBoxModel<String> model = new DefaultComboBoxModel<>();
+        model.addElement(""); //$NON-NLS-1$
+        for (Camera camera : VisionUtils.getBottomVisionCameras()) {
+            model.addElement(camera.getId());
+        }
+        String cameraId = visionSettings.getCameraId();
+        if (cameraId != null && model.getIndexOf(cameraId) < 0) {
+            model.addElement(cameraId);
+        }
+        return model;
+    }
+
+    private static class CameraIdConverter extends Converter<String, String> {
+        @Override
+        public String convertForward(String cameraId) {
+            return cameraId == null ? "" : cameraId; //$NON-NLS-1$
+        }
+
+        @Override
+        public String convertReverse(String item) {
+            return (item == null || item.isEmpty()) ? null : item;
+        }
+    }
+
+    private static class CameraIdListCellRenderer extends DefaultListCellRenderer {
+        @Override
+        public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                boolean isSelected, boolean cellHasFocus) {
+            String text;
+            String cameraId = (String) value;
+            if (cameraId == null || cameraId.isEmpty()) {
+                String defaultName;
+                try {
+                    defaultName = VisionUtils.getBottomVisionCamera().getName();
+                }
+                catch (Exception e) {
+                    defaultName = "?"; //$NON-NLS-1$
+                }
+                text = Translations.format(
+                        "BottomVisionSettingsConfigurationWizard.Camera.Default", defaultName); //$NON-NLS-1$
+            }
+            else {
+                Camera camera = Configuration.get().getMachine().getCamera(cameraId);
+                text = (camera != null) ? camera.getName()
+                        : Translations.format(
+                                "BottomVisionSettingsConfigurationWizard.Camera.Missing", cameraId); //$NON-NLS-1$
+            }
+            return super.getListCellRendererComponent(list, text, index, isSelected, cellHasFocus);
+        }
     }
 }

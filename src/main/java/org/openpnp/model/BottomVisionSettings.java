@@ -3,6 +3,8 @@ package org.openpnp.model;
 import java.awt.geom.Rectangle2D;
 
 import org.openpnp.gui.support.Wizard;
+import org.openpnp.spi.Camera;
+import org.openpnp.util.VisionUtils;
 import org.openpnp.machine.reference.vision.ReferenceBottomVision.MaxRotation;
 import org.openpnp.machine.reference.vision.ReferenceBottomVision.PartSettings;
 import org.openpnp.machine.reference.vision.ReferenceBottomVision.PartSizeCheckMethod;
@@ -30,6 +32,14 @@ public class BottomVisionSettings extends AbstractVisionSettings {
 
     @Element(required = false)
     protected Location visionOffset = new Location(LengthUnit.Millimeters);
+
+    /**
+     * Id of the up-looking camera these settings align parts on. When null (or the camera no
+     * longer exists), the machine's default bottom vision camera is used, i.e. the first
+     * up-looking camera.
+     */
+    @Attribute(required = false)
+    protected String cameraId;
 
     @Override
     public Wizard getConfigurationWizard() {
@@ -128,8 +138,31 @@ public class BottomVisionSettings extends AbstractVisionSettings {
         firePropertyChange("visionOffset", oldValue, this.visionOffset);
     }
 
+    public String getCameraId() {
+        return cameraId;
+    }
+
+    public void setCameraId(String cameraId) {
+        if (cameraId != null && cameraId.isEmpty()) {
+            cameraId = null;
+        }
+        Object oldValue = this.cameraId;
+        this.cameraId = cameraId;
+        firePropertyChange("cameraId", oldValue, cameraId);
+    }
+
+    /**
+     * @return The up-looking camera these settings align parts on, falling back to the default
+     *         bottom vision camera when none is selected.
+     * @throws Exception if the machine has no up-looking camera.
+     */
+    public Camera getCamera() throws Exception {
+        return VisionUtils.getBottomVisionCamera(this);
+    }
+
     public void setValues(BottomVisionSettings another) {
         setEnabled(another.isEnabled());
+        setCameraId(another.getCameraId());
         try {
             setPipeline(another.getPipeline().clone());
         }
